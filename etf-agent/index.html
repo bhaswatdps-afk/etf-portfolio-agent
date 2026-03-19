@@ -1,21 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ETF Portfolio Agent</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ETF Portfolio Agent</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <div class="container">
-
   <header>
     <div class="logo">
       <div class="logo-mark">EP</div>
       <div>
         <div class="logo-text">ETF Portfolio Agent</div>
-        <div class="logo-sub">₹4cr Deployment Tracker · Auto-alerts via Apps Script</div>
+        <div class="logo-sub">&#8377;4cr Deployment Tracker &middot; Auto-alerts via Apps Script</div>
       </div>
     </div>
     <div class="header-right">
@@ -30,27 +29,27 @@
     <div class="market-chip" id="chip-nifty">
       <div class="mc-label">NIFTY 50</div>
       <div class="mc-val" id="nifty-val"><span class="spinner"></span></div>
-      <div class="mc-chg" id="nifty-chg">—</div>
+      <div class="mc-chg" id="nifty-chg">&mdash;</div>
     </div>
     <div class="market-chip" id="chip-midcap">
       <div class="mc-label">MIDCAP 150</div>
       <div class="mc-val" id="mid-val"><span class="spinner"></span></div>
-      <div class="mc-chg" id="mid-chg">—</div>
+      <div class="mc-chg" id="mid-chg">&mdash;</div>
     </div>
     <div class="market-chip" id="chip-vix">
       <div class="mc-label">INDIA VIX</div>
       <div class="mc-val" id="vix-val"><span class="spinner"></span></div>
-      <div class="mc-chg" id="vix-status">—</div>
+      <div class="mc-chg" id="vix-status">&mdash;</div>
     </div>
     <div class="market-chip" id="chip-gold">
       <div class="mc-label">GOLD (USD/oz)</div>
       <div class="mc-val" id="gold-val"><span class="spinner"></span></div>
-      <div class="mc-chg" id="gold-chg">—</div>
+      <div class="mc-chg" id="gold-chg">&mdash;</div>
     </div>
     <div class="market-chip" id="chip-inr">
       <div class="mc-label">USD / INR</div>
       <div class="mc-val" id="inr-val"><span class="spinner"></span></div>
-      <div class="mc-chg" id="inr-status">—</div>
+      <div class="mc-chg" id="inr-status">&mdash;</div>
     </div>
   </div>
 
@@ -59,29 +58,85 @@
   <div class="summary-strip">
     <div class="summary-cell">
       <div class="summary-label">TOTAL INVESTED</div>
-      <div class="summary-val" id="s-invested">₹74.5L</div>
-      <div class="summary-sub muted" id="s-invested-pct">18.6% of ₹4cr corpus</div>
+      <div class="summary-val" id="s-invested">&#8377;74.5L</div>
+      <div class="summary-sub muted" id="s-invested-pct">18.6% of &#8377;4cr corpus</div>
     </div>
     <div class="summary-cell">
       <div class="summary-label">CURRENT VALUE</div>
-      <div class="summary-val green" id="s-curval">—</div>
+      <div class="summary-val green" id="s-curval">&mdash;</div>
       <div class="summary-sub" id="s-pnl">Calculating...</div>
     </div>
     <div class="summary-cell">
       <div class="summary-label">DRY POWDER</div>
-      <div class="summary-val blue">₹3.25Cr</div>
-      <div class="summary-sub muted">→ Park in LIQUIDBEES now</div>
+      <div class="summary-val blue">&#8377;3.25Cr</div>
+      <div class="summary-sub muted">&rarr; Park in LIQUIDBEES now</div>
     </div>
     <div class="summary-cell">
       <div class="summary-label">TRIGGERS ACTIVE</div>
       <div class="summary-val amber" id="s-triggers">Scanning...</div>
-      <div class="summary-sub muted" id="s-trigger-txt">—</div>
+      <div class="summary-sub muted" id="s-trigger-txt">&mdash;</div>
     </div>
   </div>
 
   <!-- TRIGGER BOARD -->
   <div class="section-label">Deployment trigger monitor</div>
   <div class="trigger-board" id="trigger-board"></div>
+
+  <!-- CLAUDE ADVISOR SECTION -->
+  <div class="section-label">Claude AI advisor</div>
+  <div class="claude-section" id="claude-section">
+    <div class="claude-header">
+      <div class="claude-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="#b06eff" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M2 17L12 22L22 17" stroke="#b06eff" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M2 12L12 17L22 12" stroke="#b06eff" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="claude-header-text">
+        <div class="claude-title">Claude&rsquo;s Top 5 Actions</div>
+        <div class="claude-sub">Live market data + news &rarr; AI-powered recommendations &middot; Refreshes with market data</div>
+      </div>
+      <div class="claude-right">
+        <span class="claude-timestamp" id="claude-timestamp">&mdash;</span>
+        <button class="btn-claude-refresh" onclick="fetchClaudeAdvice(true)" id="btn-claude-refresh">
+          &#8635; Ask Claude
+        </button>
+      </div>
+    </div>
+
+    <!-- NEWS TICKER -->
+    <div class="news-strip" id="news-strip">
+      <div class="news-label">MARKET NEWS</div>
+      <div class="news-items" id="news-items">
+        <span class="news-loading">Fetching headlines...</span>
+      </div>
+    </div>
+
+    <!-- SETUP NOTICE (shown when GAS URL not configured) -->
+    <div class="claude-setup-notice" id="claude-setup-notice" style="display:none">
+      <div class="setup-icon">&#9888;</div>
+      <div>
+        <div class="setup-title">One-time setup required</div>
+        <div class="setup-body">
+          To enable Claude recommendations, paste your <strong>Google Apps Script Web App URL</strong> below.
+          <br>Deploy the "ETF Agent &mdash; Claude Advisor API" script as a Web App (Execute as: Me, Access: Anyone), then paste the URL here.
+        </div>
+        <div class="setup-input-row">
+          <input class="form-input setup-url-input" id="gas-url-input" placeholder="https://script.google.com/macros/s/AKfy.../exec">
+          <button class="btn-add" onclick="saveGasUrl()" style="white-space:nowrap;padding:9px 16px;font-size:12px">Save &amp; Connect</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RECOMMENDATIONS GRID -->
+    <div class="claude-recs" id="claude-recs">
+      <div class="claude-loading" id="claude-loading">
+        <span class="spinner"></span>
+        <span>Analysing market data &amp; news with Claude...</span>
+      </div>
+    </div>
+  </div>
 
   <!-- HOLDINGS -->
   <div class="section-label">Current holdings</div>
@@ -108,11 +163,11 @@
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Invested (₹L)</label>
+          <label class="form-label">Invested (&#8377;L)</label>
           <input class="form-input" id="inp-amt" type="number" placeholder="28">
         </div>
         <div class="form-group">
-          <label class="form-label">Avg NAV (₹)</label>
+          <label class="form-label">Avg NAV (&#8377;)</label>
           <input class="form-input" id="inp-nav" type="number" placeholder="254.55">
         </div>
         <div class="form-group">
@@ -139,12 +194,12 @@
       <tfoot>
         <tr id="total-row">
           <td><strong>TOTAL</strong></td>
-          <td class="r">—</td><td class="r">—</td>
-          <td class="r" id="tf-invested">—</td>
-          <td class="r">—</td>
-          <td class="r" id="tf-value">—</td>
-          <td class="r" id="tf-pnl">—</td>
-          <td class="r" id="tf-pct">—</td>
+          <td class="r">&mdash;</td><td class="r">&mdash;</td>
+          <td class="r" id="tf-invested">&mdash;</td>
+          <td class="r">&mdash;</td>
+          <td class="r" id="tf-value">&mdash;</td>
+          <td class="r" id="tf-pnl">&mdash;</td>
+          <td class="r" id="tf-pct">&mdash;</td>
           <td></td>
         </tr>
       </tfoot>
@@ -152,13 +207,13 @@
   </div>
 
   <!-- APPS SCRIPT SECTION -->
-  <div class="section-label">Email alerts — Google Apps Script setup</div>
+  <div class="section-label">Email alerts &mdash; Google Apps Script setup</div>
   <div class="apps-section">
     <div class="apps-header">
       <div class="apps-icon">GAS</div>
       <div>
         <div class="apps-title">Auto-email alerts via Google Apps Script</div>
-        <div class="apps-sub">Runs every 15 minutes · Checks all triggers · Sends alert email · Free forever</div>
+        <div class="apps-sub">Runs every hour &middot; Checks all triggers &middot; Sends alert email &middot; Free forever</div>
       </div>
       <button class="btn-copy" onclick="copyScript()">Copy Apps Script</button>
     </div>
@@ -166,60 +221,21 @@
       <div class="step-card">
         <div class="step-num">01</div>
         <div class="step-title">Open Apps Script</div>
-        <div class="step-body">Go to <strong>script.google.com</strong> → New project → Paste the script below → Save</div>
+        <div class="step-body">Go to <strong>script.google.com</strong> &rarr; New project &rarr; Paste the script below &rarr; Save</div>
       </div>
       <div class="step-card">
         <div class="step-num">02</div>
         <div class="step-title">Set your email</div>
-        <div class="step-body">Edit line 3: <code>const ALERT_EMAIL = "bhaswat@classplus.co"</code> and your alert thresholds</div>
+        <div class="step-body">Edit line 3: <code>const ALERT_EMAIL = "your@email.com"</code> and your alert thresholds</div>
       </div>
       <div class="step-card">
         <div class="step-num">03</div>
         <div class="step-title">Set trigger</div>
-        <div class="step-body">Triggers → Add trigger → checkPortfolioTriggers → Time-driven → Every 15 minutes</div>
+        <div class="step-body">Triggers &rarr; Add trigger &rarr; checkPortfolioTriggers &rarr; Time-driven &rarr; Every hour</div>
       </div>
     </div>
     <pre class="code-block" id="apps-script-code"></pre>
   </div>
-
-  <!-- GITHUB DEPLOY -->
-  <div class="section-label">Deploy to GitHub Pages</div>
-  <div class="deploy-section">
-    <div class="deploy-steps">
-      <div class="deploy-step">
-        <div class="ds-num">1</div>
-        <div class="ds-body">
-          <div class="ds-title">Create GitHub repo</div>
-          <div class="ds-txt">github.com → New repo → name: <code>etf-portfolio-agent</code> → Public</div>
-        </div>
-      </div>
-      <div class="deploy-step">
-        <div class="ds-num">2</div>
-        <div class="ds-body">
-          <div class="ds-title">Upload the 3 files</div>
-          <div class="ds-txt">Drag the downloaded zip into GitHub → Upload files → Commit directly to main</div>
-        </div>
-      </div>
-      <div class="deploy-step">
-        <div class="ds-num">3</div>
-        <div class="ds-body">
-          <div class="ds-title">Enable GitHub Pages</div>
-          <div class="ds-txt">Settings → Pages → Source: main branch → / (root) → Save → Your URL: <code>username.github.io/etf-portfolio-agent</code></div>
-        </div>
-      </div>
-      <div class="deploy-step">
-        <div class="ds-num">4</div>
-        <div class="ds-body">
-          <div class="ds-title">Bookmark & done</div>
-          <div class="ds-txt">Live forever · Free · Works on mobile · Data loads from Yahoo Finance on every visit</div>
-        </div>
-      </div>
-    </div>
-    <div class="deploy-note">
-      <strong>Holdings are stored in your browser's localStorage</strong> — they persist across sessions on the same device. For multi-device sync, see the Zerodha Kite Connect section in the README.
-    </div>
-  </div>
-
 </div>
 
 <div class="toast" id="toast">Copied!</div>
