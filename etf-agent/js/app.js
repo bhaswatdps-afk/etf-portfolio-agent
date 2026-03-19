@@ -11,10 +11,12 @@ let market = {
 };
 let triggerStates = JSON.parse(localStorage.getItem('trigger_states') || '{}');
 
+
 // ─── FETCH HELPERS ────────────────────────────────────────────────────────────
 async function fetchYahoo(symbol) {
   const base1 = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=5d`;
   const base2 = `https://query2.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=5d`;
+
 
   try {
     const r = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(base1)}`, { signal: AbortSignal.timeout(8000) });
@@ -24,6 +26,7 @@ async function fetchYahoo(symbol) {
     }
   } catch(_) {}
 
+
   try {
     const r2 = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(base2)}`, { signal: AbortSignal.timeout(8000) });
     if (r2.ok) {
@@ -32,13 +35,16 @@ async function fetchYahoo(symbol) {
     }
   } catch(_) {}
 
+
   try {
     const r3 = await fetch(`https://thingproxy.freeboard.io/fetch/${base1}`, { signal: AbortSignal.timeout(8000) });
     if (r3.ok) { const result3 = extractClose(await r3.json()); if (result3) return result3; }
   } catch(_) {}
 
+
   return null;
 }
+
 
 function extractClose(data) {
   try {
@@ -49,9 +55,11 @@ function extractClose(data) {
   } catch(_) { return null; }
 }
 
+
 // ─── MARKET DATA FETCH ────────────────────────────────────────────────────────
 async function fetchMarketData() {
   setStatus('Fetching live data...');
+
 
   const [nifty, midcap, vix, gold, inr] = await Promise.all([
     fetchYahoo('%5ENSEI'),
@@ -61,280 +69,130 @@ async function fetchMarketData() {
     fetchYahoo('USDINR%3DX'),
   ]);
 
-  if (nifty) {
-    market.nifty = nifty.cur; market.niftyPrev = nifty.prev;
-    updateChip('chip-nifty', 'nifty-val', 'nifty-chg', nifty.cur, nifty.prev, '₹', 0);
-  }
-  if (midcap) {
-    market.midcap = midcap.cur; market.midcapPrev = midcap.prev;
-    updateChip('chip-midcap', 'mid-val', 'mid-chg', midcap.cur, midcap.prev, '₹', 0);
-  }
-  if (vix) {
-    market.vix = vix.cur;
-    document.getElementById('vix-val').textContent = vix.cur.toFixed(2);
-    const vixStatus = document.getElementById('vix-status');
-    if (vix.cur > 30) { vixStatus.textContent = 'EXTREME FEAR'; vixStatus.className = 'mc-chg neg'; document.getElementById('chip-vix').className = 'market-chip danger'; }
-    else if (vix.cur > 26) { vixStatus.textContent = 'HIGH FEAR'; vixStatus.className = 'mc-chg amber'; document.getElementById('chip-vix').className = 'market-chip warn'; }
-    else if (vix.cur > 20) { vixStatus.textContent = 'Elevated'; vixStatus.className = 'mc-chg amber'; document.getElementById('chip-vix').className = 'market-chip ok'; }
-    else { vixStatus.textContent = 'Normal'; vixStatus.className = 'mc-chg pos'; document.getElementById('chip-vix').className = 'market-chip ok'; }
-  }
-  if (gold) {
-    market.gold = gold.cur; market.goldPrev = gold.prev;
-    updateChip('chip-gold', 'gold-val', 'gold-chg', gold.cur, gold.prev, '$', 0);
-  }
-  if (inr) {
-    market.inr = inr.cur;
-    document.getElementById('inr-val').textContent = '₹' + inr.cur.toFixed(2);
-    const inrStatus = document.getElementById('inr-status');
-    if (inr.cur > 92) { inrStatus.textContent = 'Record low'; inrStatus.className = 'mc-chg neg'; }
-    else if (inr.cur > 88) { inrStatus.textContent = 'Weak'; inrStatus.className = 'mc-chg amber'; }
-    else { inrStatus.textContent = 'Stable'; inrStatus.className = 'mc-chg pos'; }
-  }
+// ─── CLAUDE ADVISOR ───────────────────────────────────────────────────────────
+let claudeLastFetch = 0;
+const CLAUDE_CACHE_MS = 30 * 60 * 1000; // 30 min cache
 
-  const now = new Date();
-  const anyFetched = nifty || midcap || vix || gold || inr;
-  document.getElementById('last-refresh').textContent = anyFetched
-    ? 'Updated ' + now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    : 'Live data unavailable — showing estimates';
-
-  renderHoldings();
-  renderTriggers();
-  checkAndFireAlerts();
+function saveGasUrl() {
+  const url = document.getElementById('gas-url-input').value.trim();
+  if (!url.startsWith('https://script.google.com/macros/')) {
+    showToast('Please enter a valid Apps Script Web App URL');
+    return;
+  }
+  localStorage.setItem('gas_advisor_url', url);
+  document.getElementById('claude-setup-notice').style.display = 'none';
+  showToast('Connected! Fetching Claude recommendations...');
+  fetchClaudeAdvice(true);
 }
 
-function updateChip(chipId, valId, chgId, cur, prev, prefix, decimals) {
-  const chip = document.getElementById(chipId);
-  const valEl = document.getElementById(valId);
-  const chgEl = document.getElementById(chgId);
-  const chg = cur - prev;
-  const pct = (chg / prev * 100);
-  valEl.textContent = prefix + cur.toLocaleString('en-IN', { maximumFractionDigits: decimals });
-  chgEl.textContent = `${chg >= 0 ? '+' : ''}${chg.toLocaleString('en-IN', { maximumFractionDigits: decimals })} (${chg >= 0 ? '+' : ''}${pct.toFixed(2)}%)`;
-  chgEl.className = 'mc-chg ' + (chg >= 0 ? 'pos' : 'neg');
-  chip.className = 'market-chip ok';
-}
+async function fetchClaudeAdvice(force = false) {
+  const gasUrl = localStorage.getItem('gas_advisor_url');
 
-function setStatus(txt) { document.getElementById('last-refresh').textContent = txt; }
+  // Show setup notice if no URL configured
+  if (!gasUrl) {
+    document.getElementById('claude-setup-notice').style.display = 'flex';
+    document.getElementById('claude-loading').style.display = 'none';
+    return;
+  }
 
-// ─── TRIGGER RENDER ────────────────────────────────────────────────────────────
-function renderTriggers() {
-  const board = document.getElementById('trigger-board');
-  board.innerHTML = '';
-  let activeCount = 0;
+  // Use cached result if fresh
+  const now = Date.now();
+  if (!force && (now - claudeLastFetch) < CLAUDE_CACHE_MS) return;
 
-  TRIGGER_DEFS.forEach(t => {
-    const metricVal = getMetricVal(t.metric);
-    let fired = t.alreadyTriggered;
-    let progress = 0, progressColor = '#ffb340', status = 'watching';
+  // Show loading state
+  const recsEl = document.getElementById('claude-recs');
+  const btn = document.getElementById('btn-claude-refresh');
+  recsEl.innerHTML = '<div class="claude-loading"><span class="spinner"></span><span>Analysing market data &amp; news with Claude...</span></div>';
+  if (btn) { btn.disabled = true; btn.textContent = '⟳ Thinking...'; }
 
-    if (t.alreadyTriggered) {
-      status = 'fired'; progress = 100; progressColor = '#00e87a';
-    } else if (metricVal !== null) {
-      if (t.direction === 'below') {
-        progress = Math.min(100, Math.max(0, ((t.startRef - metricVal) / (t.startRef - t.threshold)) * 100));
-        fired = metricVal < t.threshold;
-      } else {
-        progress = Math.min(100, (metricVal / t.threshold) * 100);
-        fired = metricVal > t.threshold;
-      }
-      if (fired) { status = 'alert'; progressColor = '#ff4460'; activeCount++; }
-      else if (progress > 70) { progressColor = '#ff4460'; status = 'watching'; }
-      else if (progress > 40) { progressColor = '#ffb340'; status = 'watching'; }
-      else { progressColor = '#4a9eff'; status = 'inactive'; }
-    } else { status = 'inactive'; }
+  try {
+    const payload = {
+      market: {
+        nifty: market.nifty,
+        niftyPrev: market.niftyPrev,
+        midcap: market.midcap,
+        vix: market.vix,
+        gold: market.gold,
+        inr: market.inr,
+        oil: market.oil,
+        niftyPE: market.niftyPE
+      },
+      holdings: holdings.map(h => ({ name: h.name, cat: h.cat, invested: h.invested, avgNav: h.avgNav })),
+      triggers: TRIGGER_DEFS.map(t => ({ label: t.label, threshold: t.threshold, alreadyTriggered: t.alreadyTriggered || false }))
+    };
 
-    if (t.alreadyTriggered) status = 'fired';
+    const resp = await fetch(gasUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
 
-    const curDisplay = metricVal !== null
-      ? (t.metric === 'nifty' || t.metric === 'midcap' ? '₹' + Math.round(metricVal).toLocaleString('en-IN')
-        : t.metric === 'vix' ? metricVal.toFixed(1)
-        : t.metric === 'oil' ? '$' + metricVal
-        : t.metric === 'niftyPE' ? metricVal.toFixed(1) + 'x'
-        : metricVal.toFixed(2))
-      : '—';
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Unknown error');
 
-    const dist = (metricVal !== null && t.metric === 'nifty' && !t.alreadyTriggered)
-      ? ` · ${(Math.abs((metricVal - t.threshold) / t.threshold) * 100).toFixed(1)}% from trigger` : '';
+    claudeLastFetch = Date.now();
 
-    const badge = t.alreadyTriggered ? 'DONE ✓' : status === 'alert' ? '⚡ ACT NOW' : status === 'watching' ? 'WATCHING' : '—';
-    const badgeClass = t.alreadyTriggered ? 'badge badge-fired' : status === 'alert' ? 'badge badge-alert' : status === 'watching' ? 'badge badge-watching' : 'badge badge-inactive';
-
-    const card = document.createElement('div');
-    card.className = `trigger-card tc-status-${status}`;
-    card.innerHTML = `
-      <div class="tc-tranche">${t.tranche}</div>
-      <div class="tc-head"><div class="tc-title">${t.label}</div><div class="${badgeClass}">${badge}</div></div>
-      <div class="tc-condition">${t.condition}</div>
-      <div class="tc-vals">
-        <div class="tc-cur" style="color:${status==='fired'?'var(--green)':status==='alert'?'var(--red)':'var(--text)'}">${curDisplay}</div>
-        <div class="tc-cur-lbl">${t.metric==='nifty'?'Nifty 50':t.metric==='vix'?'India VIX':t.metric==='oil'?'Brent crude':t.metric==='niftyPE'?'PE ratio':'—'}</div>
-      </div>
-      <div class="tc-target-lbl">Threshold: ${t.threshold.toLocaleString('en-IN')}${dist}</div>
-      <div class="progress-bar"><div class="progress-fill" style="width:${progress}%;background:${progressColor}"></div></div>
-      <div class="tc-action">${t.action}</div>
-      <button class="tc-copy" onclick="copyTrigger('${t.id}')">&#8494; Copy action plan</button>
-    `;
-    board.appendChild(card);
-  });
-
-  const sEl = document.getElementById('s-triggers');
-  const sTxt = document.getElementById('s-trigger-txt');
-  if (activeCount > 0) { sEl.textContent = activeCount + ' ACTIVE'; sEl.style.color = 'var(--red)'; sTxt.textContent = 'Action required — check trigger board'; }
-  else { sEl.textContent = 'Watching'; sEl.style.color = 'var(--amber)'; sTxt.textContent = 'No immediate triggers fired'; }
-}
-
-function getMetricVal(metric) {
-  if (metric === 'nifty') return market.nifty;
-  if (metric === 'midcap') return market.midcap;
-  if (metric === 'vix') return market.vix;
-  if (metric === 'oil') return market.oil;
-  if (metric === 'niftyPE') return market.niftyPE;
-  return null;
-}
-
-// ─── ALERTS ───────────────────────────────────────────────────────────────────
-function checkAndFireAlerts() {
-  TRIGGER_DEFS.forEach(t => {
-    if (t.alreadyTriggered) return;
-    const val = getMetricVal(t.metric);
-    if (val === null) return;
-    const fired = t.direction === 'below' ? val < t.threshold : val > t.threshold;
-    if (fired && !triggerStates[t.id + '_fired_today']) {
-      triggerStates[t.id + '_fired_today'] = true;
-      localStorage.setItem('trigger_states', JSON.stringify(triggerStates));
-      showToast(`⚡ ${t.label} — CHECK NOW`);
-      if (Notification && Notification.permission === 'granted') {
-        new Notification('ETF Portfolio Agent', { body: t.label + '\n' + t.action.substring(0, 80) + '...' });
-      }
+    // Render news
+    if (data.news && data.news.length > 0) {
+      renderNews(data.news);
     }
-  });
-  if (Notification && Notification.permission === 'default') Notification.requestPermission();
-}
 
-// ─── HOLDINGS RENDER ──────────────────────────────────────────────────────────
-function renderHoldings() {
-  const tbody = document.getElementById('holdings-body');
-  tbody.innerHTML = '';
-  let totInv = 0, totVal = 0;
+    // Render recommendations
+    renderClaudeRecs(data.recommendations);
 
-  holdings.forEach((h, i) => {
-    const units = (h.invested * 100000) / h.avgNav;
-    const curPrice = estimatePrice(h);
-    const curVal = (units * curPrice) / 100000;
-    const pnl = curVal - h.invested;
-    const pct = (pnl / h.invested) * 100;
-    totInv += h.invested; totVal += curVal;
-    const catLabels = { large:'LARGE CAP', mid:'MIDCAP', small:'SMALLCAP', sectoral:'SECTORAL', gold:'GOLD', liquid:'LIQUID', mutual:'MUTUAL FUND' };
-    const pClass = pnl >= 0 ? 'pos' : 'neg';
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><div class="fund-name">${h.name}</div><div class="fund-ticker">${h.ticker}</div><span class="cat-tag cat-${h.cat}">${catLabels[h.cat]||h.cat.toUpperCase()}</span></td>
-      <td class="r">₹${h.avgNav.toFixed(2)}</td>
-      <td class="r">${Math.round(units).toLocaleString('en-IN')}</td>
-      <td class="r">₹${h.invested.toFixed(2)}L</td>
-      <td class="r">₹${curPrice.toFixed(2)}</td>
-      <td class="r">₹${curVal.toFixed(2)}L</td>
-      <td class="r ${pClass}">${pnl>=0?'+':''}₹${pnl.toFixed(2)}L</td>
-      <td class="r ${pClass}">${pct>=0?'+':''}${pct.toFixed(2)}%</td>
-      <td><button class="btn-del" onclick="deleteHolding(${i})" title="Remove">×</button></td>
-    `;
-    tbody.appendChild(tr);
-  });
+    // Update timestamp
+    const ts = document.getElementById('claude-timestamp');
+    if (ts) ts.textContent = 'Updated ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
-  const totPnl = totVal - totInv;
-  const totPct = (totPnl / totInv) * 100;
-  const pc = totPnl >= 0 ? 'pos' : 'neg';
-  document.getElementById('tf-invested').textContent = `₹${totInv.toFixed(2)}L`;
-  document.getElementById('tf-value').textContent = `₹${totVal.toFixed(2)}L`;
-  document.getElementById('tf-pnl').className = 'r ' + pc;
-  document.getElementById('tf-pnl').textContent = `${totPnl>=0?'+':''}₹${totPnl.toFixed(2)}L`;
-  document.getElementById('tf-pct').className = 'r ' + pc;
-  document.getElementById('tf-pct').textContent = `${totPct>=0?'+':''}${totPct.toFixed(2)}%`;
-  document.getElementById('s-invested').textContent = `₹${totInv.toFixed(1)}L`;
-  document.getElementById('s-invested-pct').textContent = `${((totInv/CONFIG.CORPUS_LAKHS)*100).toFixed(1)}% of ₹4cr corpus`;
-  document.getElementById('s-curval').textContent = `₹${totVal.toFixed(1)}L`;
-  const pnlEl = document.getElementById('s-pnl');
-  pnlEl.textContent = `${totPnl>=0?'+':''}₹${totPnl.toFixed(2)}L (${totPct>=0?'+':''}${totPct.toFixed(2)}%)`;
-  pnlEl.className = 'summary-sub ' + pc;
-}
-
-function estimatePrice(h) {
-  if (!market.nifty || !market.niftyPrev || market.niftyPrev === 0) return h.avgNav;
-  const niftyChg = (market.nifty - market.niftyPrev) / market.niftyPrev;
-  const beta = { large: 1.0, mutual: 1.0, mid: 1.15, small: 1.3, sectoral: 1.1, gold: 0.2, liquid: 0 };
-  return h.avgNav * (1 + niftyChg * (beta[h.cat] || 1.0));
-}
-
-// ─── HOLDINGS CRUD ────────────────────────────────────────────────────────────
-function addHolding() {
-  const name = document.getElementById('inp-name').value.trim();
-  const cat = document.getElementById('inp-cat').value;
-  const amt = parseFloat(document.getElementById('inp-amt').value);
-  const nav = parseFloat(document.getElementById('inp-nav').value);
-  if (!name || isNaN(amt) || isNaN(nav) || amt <= 0 || nav <= 0) { showToast('Fill all fields with valid numbers'); return; }
-  const idx = holdings.findIndex(h => h.ticker.toLowerCase() === name.toLowerCase() || h.name.toLowerCase() === name.toLowerCase());
-  if (idx >= 0) {
-    const h = holdings[idx];
-    const oldUnits = (h.invested * 100000) / h.avgNav;
-    const newUnits = (amt * 100000) / nav;
-    h.invested += amt;
-    h.avgNav = (h.invested * 100000) / (oldUnits + newUnits);
-    showToast(`Updated ${name} · Weighted avg NAV: ₹${h.avgNav.toFixed(2)}`);
-  } else {
-    holdings.push({ id: 'h' + Date.now(), name, ticker: name, cat, invested: amt, avgNav: nav });
-    showToast(`Added ${name}`);
+  } catch(err) {
+    recsEl.innerHTML = '<div class="claude-error">⚠ Failed to fetch recommendations: ' + err.message + '. Check your Apps Script URL and try again.</div>';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Ask Claude'; }
   }
-  localStorage.setItem('etf_holdings', JSON.stringify(holdings));
-  ['inp-name','inp-amt','inp-nav'].forEach(id => { document.getElementById(id).value = ''; });
-  renderHoldings();
 }
 
-function deleteHolding(i) {
-  if (!confirm(`Remove ${holdings[i].name}?`)) return;
-  holdings.splice(i, 1);
-  localStorage.setItem('etf_holdings', JSON.stringify(holdings));
-  renderHoldings();
-  showToast('Removed');
+function renderNews(newsItems) {
+  const newsEl = document.getElementById('news-items');
+  if (!newsEl) return;
+  newsEl.innerHTML = newsItems.map((item, i) =>
+    '<div class="news-item"><span class="news-item-num">' + (i + 1) + '.</span><span>' + item + '</span></div>'
+  ).join('');
 }
 
-function toggleAddPanel() {
-  const p = document.getElementById('add-panel');
-  p.style.display = p.style.display === 'none' ? 'block' : 'none';
-}
+function renderClaudeRecs(text) {
+  const recsEl = document.getElementById('claude-recs');
+  if (!recsEl) return;
 
-// ─── APPS SCRIPT ──────────────────────────────────────────────────────────────
-function copyScript() {
-  navigator.clipboard.writeText(APPS_SCRIPT_CODE).then(() => showToast('Apps Script code copied — paste into script.google.com'));
-}
-function copyTrigger(id) {
-  const t = TRIGGER_DEFS.find(x => x.id === id);
-  if (!t) return;
-  navigator.clipboard.writeText(`${t.label}\nCondition: ${t.condition}\nAction: ${t.action}`).then(() => showToast('Action plan copied'));
-}
-
-// ─── TOAST ────────────────────────────────────────────────────────────────────
-function showToast(msg) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 3000);
-}
-
-// ─── INIT ─────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  const pre = document.getElementById('apps-script-code');
-  if (pre) pre.textContent = APPS_SCRIPT_CODE;
-
-  renderHoldings();
-  renderTriggers();
-  fetchMarketData();
-
-  setInterval(fetchMarketData, CONFIG.REFRESH_INTERVAL_MS);
-
-  const today = new Date().toDateString();
-  if (localStorage.getItem('trigger_state_date') !== today) {
-    localStorage.setItem('trigger_state_date', today);
-    localStorage.setItem('trigger_states', '{}');
-    triggerStates = {};
+  // Parse the structured output from Claude
+  const blocks = text.split(/\n(?=\d+\.)/).filter(b => b.trim());
+  if (blocks.length === 0) {
+    recsEl.innerHTML = '<div class="claude-error">No recommendations parsed. Raw response: ' + text.substring(0, 200) + '</div>';
+    return;
   }
-});
+
+  let html = '';
+  blocks.forEach((block, i) => {
+    const actionMatch = block.match(/ACTION:\s*(.+?)(?=\nREASON:|$)/s);
+    const reasonMatch = block.match(/REASON:\s*(.+?)(?=\nURGENCY:|$)/s);
+    const urgencyMatch = block.match(/URGENCY:\s*(HIGH|MEDIUM|LOW)/i);
+
+    const action = actionMatch ? actionMatch[1].trim() : block.replace(/^\d+\.\s*/, '').split('\n')[0].trim();
+    const reason = reasonMatch ? reasonMatch[1].trim() : '';
+    const urgency = urgencyMatch ? urgencyMatch[1].toUpperCase() : 'MEDIUM';
+
+    html += '<div class="rec-urgency-' + urgency + '">' +
+      '<div class="claude-rec-card">' +
+        '<div class="rec-num">0' + (i + 1) + '</div>' +
+        '<div class="rec-body">' +
+          '<div class="rec-action">' + action + '</div>' +
+          (reason ? '<div class="rec-reason">' + reason + '</div>' : '') +
+        '</div>' +
+        '<div class="rec-urgency-badge">' + urgency + '</div>' +
+      '</div>' +
+    '</div>';
+  });
+
+  html += '<div class="claude-footer"><div class="claude-footer-dot"></div>Generated by Claude Haiku &middot; Based on live Nifty, VIX, Gold + latest market news &middot; Not financial advice</div>';
+  recsEl.innerHTML = html;
+}
